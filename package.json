@@ -1,0 +1,11 @@
+{
+  "name": "business-bullshit-bingo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Corporate buzzword bingo for meetings. No dependencies, no build step.",
+  "scripts": {
+    "test": "node --test",
+    "serve": "python3 -m http.server 8000"
+  }
+}

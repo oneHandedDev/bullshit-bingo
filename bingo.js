@@ -16,6 +16,28 @@ export function seededRng(seed) {
   };
 }
 
+/**
+ * FNV-1a over `text`, then a murmur3-style avalanche finalizer. FNV-1a
+ * alone leaves a small input change visible mostly in the low bits;
+ * since `seededRng` is a linear congruential generator whose early
+ * output is most sensitive to exactly those bits, two similar session
+ * codes would otherwise draw suspiciously similar cards. The finalizer
+ * mixes high and low bits together so that doesn't happen.
+ */
+export function hashSeed(text) {
+  let hash = 0x811c9dc5; // FNV-1a 32-bit offset basis
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0; // FNV-1a 32-bit prime
+  }
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x85ebca6b) >>> 0;
+  hash ^= hash >>> 13;
+  hash = Math.imul(hash, 0xc2b2ae35) >>> 0;
+  hash ^= hash >>> 16;
+  return hash >>> 0;
+}
+
 function buildLines(size) {
   const lines = [];
   for (let row = 0; row < size; row += 1) {

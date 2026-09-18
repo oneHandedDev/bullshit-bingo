@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { CARD_SIZE, CELL_COUNT, LINES, TITLE, lineName, shuffle, buildCard, findWins, formatShare, seededRng } from './bingo.js';
+import { CARD_SIZE, CELL_COUNT, LINES, TITLE, lineName, shuffle, buildCard, findWins, formatShare, seededRng, hashSeed } from './bingo.js';
 import { DECK } from './deck.js';
 
 test('card geometry is 5x5 with 25 cells', () => {
@@ -71,6 +71,31 @@ test('shuffle with the same seed produces the same order', () => {
 
 test('shuffle with different seeds produces different orders', () => {
   assert.notDeepEqual(shuffle(NUMBERS, seededRng(1)), shuffle(NUMBERS, seededRng(9)));
+});
+
+test('hashSeed is deterministic', () => {
+  assert.equal(hashSeed('k7m2:some-id'), hashSeed('k7m2:some-id'));
+});
+
+test('hashSeed returns an unsigned 32-bit integer', () => {
+  const value = hashSeed('anything');
+  assert.ok(Number.isInteger(value));
+  assert.ok(value >= 0 && value <= 2 ** 32 - 1);
+});
+
+test('hashSeed avalanches on a one-character input change', () => {
+  // Fixed pair, computed once: a one-character change in the session code
+  // must not leave the hash close to its neighbor, or seededRng (an LCG,
+  // whose early output correlates across adjacent seeds) would produce
+  // visibly similar cards for visibly similar session codes.
+  const a = hashSeed('k7m2:11111111-1111-1111-1111-111111111111');
+  const b = hashSeed('k7m3:11111111-1111-1111-1111-111111111111');
+  const differingBits = (a ^ b).toString(2).split('').filter((bit) => bit === '1').length;
+  assert.ok(differingBits >= 8, `only ${differingBits}/32 bits differ`);
+});
+
+test('hashSeed handles the empty string without throwing', () => {
+  assert.doesNotThrow(() => hashSeed(''));
 });
 
 test('buildCard returns 25 unique phrases drawn from the deck', () => {

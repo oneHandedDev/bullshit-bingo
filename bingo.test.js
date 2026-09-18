@@ -278,6 +278,21 @@ test('buildCard draws a different card for a different seed', () => {
   assert.notDeepEqual(first, second);
 });
 
+test('a session card is fully determined by session code and player id — same pair, same card; different pair, different card', () => {
+  const seedFor = (code, id) => hashSeed(`${code}:${id}`);
+  const cardFor = (code, id) => buildCard(DECK, seededRng(seedFor(code, id)));
+
+  const first = cardFor('k7m2', 'player-a');
+  const second = cardFor('k7m2', 'player-a');
+  assert.deepEqual(first, second, 'same session code + same player id must reproduce the same card');
+
+  const differentCode = cardFor('k7m3', 'player-a');
+  assert.notDeepEqual(first, differentCode, 'a different session code must change the card');
+
+  const differentId = cardFor('k7m2', 'player-b');
+  assert.notDeepEqual(first, differentId, 'a different player id must change the card');
+});
+
 test('DECK is large enough that two colleagues barely overlap', () => {
   assert.ok(
     DECK.length >= CELL_COUNT * 4,

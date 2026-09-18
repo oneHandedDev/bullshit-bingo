@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { CARD_SIZE, CELL_COUNT, LINES, TITLE, lineName, shuffle, buildCard, findWins, formatShare } from './bingo.js';
+import { CARD_SIZE, CELL_COUNT, LINES, TITLE, lineName, shuffle, buildCard, findWins, formatShare, seededRng, hashSeed, packMarks, unpackMarks } from './bingo.js';
 import { DECK } from './deck.js';
 
 test('card geometry is 5x5 with 25 cells', () => {
@@ -53,19 +53,6 @@ test('lineName describes rows, columns and diagonals', () => {
   assert.equal(lineName(11), 'diagonal ↙');
 });
 
-/**
- * Deterministic linear congruential generator, so shuffles are reproducible.
- * Same numeric constants as Numerical Recipes; quality is irrelevant here,
- * repeatability is the whole point.
- */
-function seededRng(seed) {
-  let state = seed >>> 0;
-  return () => {
-    state = (state * 1664525 + 1013904223) >>> 0;
-    return state / 2 ** 32;
-  };
-}
-
 const NUMBERS = Array.from({ length: 30 }, (_, i) => `phrase ${i}`);
 
 test('shuffle returns a permutation without mutating the input', () => {
@@ -84,6 +71,31 @@ test('shuffle with the same seed produces the same order', () => {
 
 test('shuffle with different seeds produces different orders', () => {
   assert.notDeepEqual(shuffle(NUMBERS, seededRng(1)), shuffle(NUMBERS, seededRng(9)));
+});
+
+test('hashSeed is deterministic', () => {
+  assert.equal(hashSeed('k7m2:some-id'), hashSeed('k7m2:some-id'));
+});
+
+test('hashSeed returns an unsigned 32-bit integer', () => {
+  const value = hashSeed('anything');
+  assert.ok(Number.isInteger(value));
+  assert.ok(value >= 0 && value <= 2 ** 32 - 1);
+});
+
+test('hashSeed avalanches on a one-character input change', () => {
+  // Fixed pair, computed once: a one-character change in the session code
+  // must not leave the hash close to its neighbor, or seededRng (an LCG,
+  // whose early output correlates across adjacent seeds) would produce
+  // visibly similar cards for visibly similar session codes.
+  const a = hashSeed('k7m2:11111111-1111-1111-1111-111111111111');
+  const b = hashSeed('k7m3:11111111-1111-1111-1111-111111111111');
+  const differingBits = (a ^ b).toString(2).split('').filter((bit) => bit === '1').length;
+  assert.ok(differingBits >= 8, `only ${differingBits}/32 bits differ`);
+});
+
+test('hashSeed handles the empty string without throwing', () => {
+  assert.doesNotThrow(() => hashSeed(''));
 });
 
 test('buildCard returns 25 unique phrases drawn from the deck', () => {
@@ -145,6 +157,39 @@ test('findWins reports all 12 lines for a full card', () => {
   const wins = findWins(new Array(CELL_COUNT).fill(true));
 
   assert.deepEqual(wins, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+});
+
+test('packMarks/unpackMarks round-trip arbitrary boolean arrays', () => {
+  const rng = seededRng(99);
+  for (let trial = 0; trial < 20; trial += 1) {
+    const marked = Array.from({ length: CELL_COUNT }, () => rng() < 0.5);
+    assert.deepEqual(unpackMarks(packMarks(marked)), marked);
+  }
+});
+
+test('packMarks/unpackMarks round-trip all-false and all-true', () => {
+  const allFalse = new Array(CELL_COUNT).fill(false);
+  const allTrue = new Array(CELL_COUNT).fill(true);
+
+  assert.equal(packMarks(allFalse), '0');
+  assert.deepEqual(unpackMarks(packMarks(allFalse)), allFalse);
+  assert.deepEqual(unpackMarks(packMarks(allTrue)), allTrue);
+});
+
+test('unpackMarks tolerates garbage input without throwing', () => {
+  const blank = new Array(CELL_COUNT).fill(false);
+
+  assert.deepEqual(unpackMarks('!!!'), blank, 'non-base36 characters');
+  assert.deepEqual(unpackMarks(''), blank, 'empty string');
+  assert.deepEqual(unpackMarks(null), blank, 'null');
+  assert.deepEqual(unpackMarks(undefined), blank, 'undefined');
+  assert.deepEqual(unpackMarks('abcdef'), blank, 'longer than 5 characters');
+});
+
+test('unpackMarks always returns exactly CELL_COUNT entries', () => {
+  assert.equal(unpackMarks('jz6rj').length, CELL_COUNT);
+  assert.equal(unpackMarks('bogus!!!').length, CELL_COUNT);
+  assert.equal(unpackMarks('').length, CELL_COUNT);
 });
 
 test('formatShare without wins omits BINGO and reports the count', () => {
@@ -231,6 +276,21 @@ test('buildCard draws a different card for a different seed', () => {
 
   assert.equal(first.length, CELL_COUNT);
   assert.notDeepEqual(first, second);
+});
+
+test('a session card is fully determined by session code and player id — same pair, same card; different pair, different card', () => {
+  const seedFor = (code, id) => hashSeed(`${code}:${id}`);
+  const cardFor = (code, id) => buildCard(DECK, seededRng(seedFor(code, id)));
+
+  const first = cardFor('k7m2', 'player-a');
+  const second = cardFor('k7m2', 'player-a');
+  assert.deepEqual(first, second, 'same session code + same player id must reproduce the same card');
+
+  const differentCode = cardFor('k7m3', 'player-a');
+  assert.notDeepEqual(first, differentCode, 'a different session code must change the card');
+
+  const differentId = cardFor('k7m2', 'player-b');
+  assert.notDeepEqual(first, differentId, 'a different player id must change the card');
 });
 
 test('DECK is large enough that two colleagues barely overlap', () => {

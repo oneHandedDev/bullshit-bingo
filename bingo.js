@@ -3,6 +3,41 @@ export const CELL_COUNT = CARD_SIZE * CARD_SIZE;
 // Also appears as literal text in index.html's <title> and <h1>; the two must move together.
 export const TITLE = 'Business Bullshit Bingo';
 
+/**
+ * Deterministic linear congruential generator, so shuffles — and, later,
+ * session cards — are reproducible from a seed. Same numeric constants as
+ * Numerical Recipes; quality is irrelevant here, repeatability is the point.
+ */
+export function seededRng(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+/**
+ * FNV-1a over `text`, then a murmur3-style avalanche finalizer. FNV-1a
+ * alone leaves a small input change visible mostly in the low bits;
+ * since `seededRng` is a linear congruential generator whose early
+ * output is most sensitive to exactly those bits, two similar session
+ * codes would otherwise draw suspiciously similar cards. The finalizer
+ * mixes high and low bits together so that doesn't happen.
+ */
+export function hashSeed(text) {
+  let hash = 0x811c9dc5; // FNV-1a 32-bit offset basis
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0; // FNV-1a 32-bit prime
+  }
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x85ebca6b) >>> 0;
+  hash ^= hash >>> 13;
+  hash = Math.imul(hash, 0xc2b2ae35) >>> 0;
+  hash ^= hash >>> 16;
+  return hash >>> 0;
+}
+
 function buildLines(size) {
   const lines = [];
   for (let row = 0; row < size; row += 1) {
@@ -59,6 +94,36 @@ export function findWins(marked) {
     }
   });
   return wins;
+}
+
+const MARKS_PATTERN = /^[0-9a-z]{1,5}$/;
+
+/** boolean[CELL_COUNT] -> base36 string. Bit `i` is cell `i`, LSB first. */
+export function packMarks(marked) {
+  let bits = 0;
+  for (let i = 0; i < CELL_COUNT; i += 1) {
+    if (marked[i]) {
+      bits |= 1 << i;
+    }
+  }
+  return bits.toString(36);
+}
+
+/**
+ * base36 string -> boolean[CELL_COUNT]. Every bitmask is a legal game
+ * state, so this never throws: anything that isn't a clean, in-range
+ * base36 string of the right length is treated as "no marks yet."
+ */
+export function unpackMarks(text) {
+  const blank = new Array(CELL_COUNT).fill(false);
+  if (typeof text !== 'string' || !MARKS_PATTERN.test(text)) {
+    return blank;
+  }
+  const bits = parseInt(text, 36);
+  if (!Number.isFinite(bits) || bits < 0 || bits >= 2 ** CELL_COUNT) {
+    return blank;
+  }
+  return blank.map((_, i) => Boolean(bits & (1 << i)));
 }
 
 const MARKED_EMOJI = '🟩';

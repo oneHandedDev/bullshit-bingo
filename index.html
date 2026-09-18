@@ -135,22 +135,86 @@
         color: var(--muted);
         white-space: pre-wrap;
       }
+
+      .muted {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .warning {
+        margin: 0 0 0.75rem;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.85rem;
+        color: var(--marked-fg);
+        background: var(--accent);
+        border-radius: 0.5rem;
+      }
+
+      .session-footer {
+        margin-top: 1rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--cell-border);
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+
+      .session-footer button,
+      .session-footer a {
+        font: inherit;
+        color: var(--accent);
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        text-decoration: underline;
+      }
+
+      #session-code {
+        font-family: ui-monospace, SFMono-Regular, monospace;
+        color: var(--fg);
+      }
     </style>
   </head>
   <body>
     <main>
       <h1>Business Bullshit Bingo</h1>
 
-      <div class="actions">
-        <button id="new-card" type="button">New card</button>
-        <button id="copy-result" type="button">Copy result</button>
-      </div>
+      <section id="start-screen" hidden>
+        <p class="muted">
+          Start a session and share the link. Everyone who opens it gets
+          their own card, locked until someone starts a new session.
+        </p>
+        <div class="actions">
+          <button id="start-session" type="button">Start a session</button>
+        </div>
+      </section>
 
-      <p id="banner" class="banner" aria-live="polite"></p>
+      <section id="game-screen" hidden>
+        <p id="cookie-warning" class="warning" hidden>
+          Cookies are blocked in this browser, so your card will reset if
+          you reload this page.
+        </p>
 
-      <div id="grid" class="grid" role="group" aria-label="Bingo card"></div>
+        <div class="actions">
+          <button id="copy-result" type="button">Copy result</button>
+        </div>
 
-      <p id="status" class="status" aria-live="polite"></p>
+        <p id="banner" class="banner" aria-live="polite"></p>
+
+        <div id="grid" class="grid" role="group" aria-label="Bingo card"></div>
+
+        <p id="status" class="status" aria-live="polite"></p>
+
+        <footer class="session-footer">
+          Session <code id="session-code"></code>
+          <button id="copy-invite" type="button">Copy invite link</button>
+          <a id="new-session" href="#">New session</a>
+        </footer>
+      </section>
     </main>
 
     <script type="module">
@@ -162,68 +226,118 @@
         findWins,
         formatShare,
         lineName,
+        seededRng,
+        hashSeed,
       } from './bingo.js';
+      import {
+        currentCode,
+        mintCode,
+        loadIdentity,
+        loadMarks,
+        saveMarks,
+        cookiesEnabled,
+      } from './session.js';
 
+      const startScreen = document.getElementById('start-screen');
+      const gameScreen = document.getElementById('game-screen');
+      const startButton = document.getElementById('start-session');
+      const cookieWarning = document.getElementById('cookie-warning');
+      const sessionCodeEl = document.getElementById('session-code');
+      const copyInviteButton = document.getElementById('copy-invite');
+      const newSessionLink = document.getElementById('new-session');
       const grid = document.getElementById('grid');
       const banner = document.getElementById('banner');
       const status = document.getElementById('status');
+      const copyResultButton = document.getElementById('copy-result');
 
-      let card = buildCard(DECK);
-      let marked = new Array(CELL_COUNT).fill(false);
+      const code = currentCode();
 
-      const cells = Array.from({ length: CELL_COUNT }, (_, index) => {
-        const cell = document.createElement('button');
-        cell.type = 'button';
-        cell.className = 'cell';
-        cell.addEventListener('click', () => {
-          marked[index] = !marked[index];
-          status.textContent = '';
-          render();
+      if (!code) {
+        startScreen.hidden = false;
+        startButton.addEventListener('click', () => {
+          location.search = `?s=${mintCode()}`;
         });
-        grid.append(cell);
-        return cell;
-      });
-
-      function render() {
-        const wins = findWins(marked);
-        const winningCells = new Set(wins.flatMap((win) => LINES[win]));
-
-        cells.forEach((cell, index) => {
-          cell.textContent = card[index];
-          cell.classList.toggle('marked', marked[index]);
-          cell.classList.toggle('winning', winningCells.has(index));
-          cell.setAttribute('aria-pressed', String(marked[index]));
-        });
-
-        const nextBanner =
-          wins.length > 0 ? `BINGO — ${wins.map(lineName).join(', ')}` : '';
-        if (banner.textContent !== nextBanner) {
-          banner.textContent = nextBanner;
-        }
+      } else {
+        startGame(code);
       }
 
-      document.getElementById('new-card').addEventListener('click', () => {
-        const inProgress = marked.some(Boolean);
-        if (inProgress && !confirm('Start a new card? Current marks are lost.')) {
-          return;
+      function startGame(sessionCode) {
+        gameScreen.hidden = false;
+        sessionCodeEl.textContent = sessionCode;
+
+        if (!cookiesEnabled()) {
+          cookieWarning.hidden = false;
         }
-        card = buildCard(DECK);
-        marked = new Array(CELL_COUNT).fill(false);
-        status.textContent = '';
+
+        const id = loadIdentity();
+        const card = buildCard(DECK, seededRng(hashSeed(`${sessionCode}:${id}`)));
+        const marked = loadMarks(sessionCode);
+
+        const cells = Array.from({ length: CELL_COUNT }, (_, index) => {
+          const cell = document.createElement('button');
+          cell.type = 'button';
+          cell.className = 'cell';
+          cell.addEventListener('click', () => {
+            marked[index] = !marked[index];
+            saveMarks(sessionCode, marked);
+            status.textContent = '';
+            render();
+          });
+          grid.append(cell);
+          return cell;
+        });
+
+        function render() {
+          const wins = findWins(marked);
+          const winningCells = new Set(wins.flatMap((win) => LINES[win]));
+
+          cells.forEach((cell, index) => {
+            cell.textContent = card[index];
+            cell.classList.toggle('marked', marked[index]);
+            cell.classList.toggle('winning', winningCells.has(index));
+            cell.setAttribute('aria-pressed', String(marked[index]));
+          });
+
+          const nextBanner =
+            wins.length > 0 ? `BINGO — ${wins.map(lineName).join(', ')}` : '';
+          if (banner.textContent !== nextBanner) {
+            banner.textContent = nextBanner;
+          }
+        }
+
+        copyResultButton.addEventListener('click', async () => {
+          const text = formatShare(marked, findWins(marked));
+          try {
+            await navigator.clipboard.writeText(text);
+            status.textContent = 'Copied to clipboard.';
+          } catch {
+            status.textContent = `Copy failed — select and copy this:\n${text}`;
+          }
+        });
+
+        copyInviteButton.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(location.href);
+            status.textContent = 'Invite link copied.';
+          } catch {
+            status.textContent = `Copy failed — select and copy this:\n${location.href}`;
+          }
+        });
+
+        newSessionLink.addEventListener('click', (event) => {
+          event.preventDefault();
+          const inProgress = marked.some(Boolean);
+          if (
+            inProgress &&
+            !confirm('Start a new session? Your current card and marks are left behind.')
+          ) {
+            return;
+          }
+          location.search = `?s=${mintCode()}`;
+        });
+
         render();
-      });
-
-      document.getElementById('copy-result').addEventListener('click', async () => {
-        const text = formatShare(marked, findWins(marked));
-        try {
-          await navigator.clipboard.writeText(text);
-          status.textContent = 'Copied to clipboard.';
-        } catch {
-          status.textContent = `Copy failed — select and copy this:\n${text}`;
-        }
-      });
-
-      render();
+      }
     </script>
   </body>
 </html>

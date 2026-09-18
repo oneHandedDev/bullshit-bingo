@@ -77,3 +77,5 @@ Decisions 3 and 4 are structural and cheap to keep. Decisions 1, 2, and 5 are th
 ## Changes since acceptance
 
 **2026-09-14 — the card grew from 4×4 to 5×5.** Cell counts in this document were updated to match; none of the five decisions changed. The change cost one constant in `bingo.js` (`CARD_SIZE`) plus two CSS declarations, which is decision 3 paying off — the geometry was derived, not hardcoded. The two CSS declarations were `grid-template-columns: repeat(5, minmax(0, 1fr))` (a plain `1fr` floors at min-content and scrolled the page sideways on a phone at five columns) and `overflow-wrap: break-word` (narrower cells made `anywhere` split words gratuitously).
+
+**2026-09-18 — decision 5 (no cookies, no query parameters) was amended.** Lobby sessions need both to survive a reload without a server: the session code lives in the URL and player identity plus marks live in cookies. `localStorage` is still unused. See [ADR 0002](0002-cookie-backed-lobby-sessions.md) for the full reasoning.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { CARD_SIZE, CELL_COUNT, LINES, TITLE, lineName, shuffle, buildCard, findWins, formatShare } from './bingo.js';
+import { CARD_SIZE, CELL_COUNT, LINES, TITLE, lineName, shuffle, buildCard, findWins, formatShare, seededRng } from './bingo.js';
 import { DECK } from './deck.js';
 
 test('card geometry is 5x5 with 25 cells', () => {
@@ -52,19 +52,6 @@ test('lineName describes rows, columns and diagonals', () => {
   assert.equal(lineName(10), 'diagonal ↘');
   assert.equal(lineName(11), 'diagonal ↙');
 });
-
-/**
- * Deterministic linear congruential generator, so shuffles are reproducible.
- * Same numeric constants as Numerical Recipes; quality is irrelevant here,
- * repeatability is the whole point.
- */
-function seededRng(seed) {
-  let state = seed >>> 0;
-  return () => {
-    state = (state * 1664525 + 1013904223) >>> 0;
-    return state / 2 ** 32;
-  };
-}
 
 const NUMBERS = Array.from({ length: 30 }, (_, i) => `phrase ${i}`);
 

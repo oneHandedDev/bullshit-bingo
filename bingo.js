@@ -3,6 +3,19 @@ export const CELL_COUNT = CARD_SIZE * CARD_SIZE;
 // Also appears as literal text in index.html's <title> and <h1>; the two must move together.
 export const TITLE = 'Business Bullshit Bingo';
 
+/**
+ * Deterministic linear congruential generator, so shuffles — and, later,
+ * session cards — are reproducible from a seed. Same numeric constants as
+ * Numerical Recipes; quality is irrelevant here, repeatability is the point.
+ */
+export function seededRng(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
 function buildLines(size) {
   const lines = [];
   for (let row = 0; row < size; row += 1) {

@@ -96,6 +96,36 @@ export function findWins(marked) {
   return wins;
 }
 
+const MARKS_PATTERN = /^[0-9a-z]{1,5}$/;
+
+/** boolean[CELL_COUNT] -> base36 string. Bit `i` is cell `i`, LSB first. */
+export function packMarks(marked) {
+  let bits = 0;
+  for (let i = 0; i < CELL_COUNT; i += 1) {
+    if (marked[i]) {
+      bits |= 1 << i;
+    }
+  }
+  return bits.toString(36);
+}
+
+/**
+ * base36 string -> boolean[CELL_COUNT]. Every bitmask is a legal game
+ * state, so this never throws: anything that isn't a clean, in-range
+ * base36 string of the right length is treated as "no marks yet."
+ */
+export function unpackMarks(text) {
+  const blank = new Array(CELL_COUNT).fill(false);
+  if (typeof text !== 'string' || !MARKS_PATTERN.test(text)) {
+    return blank;
+  }
+  const bits = parseInt(text, 36);
+  if (!Number.isFinite(bits) || bits < 0 || bits >= 2 ** CELL_COUNT) {
+    return blank;
+  }
+  return blank.map((_, i) => Boolean(bits & (1 << i)));
+}
+
 const MARKED_EMOJI = '🟩';
 const UNMARKED_EMOJI = '⬜';
 

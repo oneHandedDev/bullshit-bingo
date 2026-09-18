@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { CARD_SIZE, CELL_COUNT, LINES, TITLE, lineName, shuffle, buildCard, findWins, formatShare, seededRng, hashSeed } from './bingo.js';
+import { CARD_SIZE, CELL_COUNT, LINES, TITLE, lineName, shuffle, buildCard, findWins, formatShare, seededRng, hashSeed, packMarks, unpackMarks } from './bingo.js';
 import { DECK } from './deck.js';
 
 test('card geometry is 5x5 with 25 cells', () => {
@@ -157,6 +157,39 @@ test('findWins reports all 12 lines for a full card', () => {
   const wins = findWins(new Array(CELL_COUNT).fill(true));
 
   assert.deepEqual(wins, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+});
+
+test('packMarks/unpackMarks round-trip arbitrary boolean arrays', () => {
+  const rng = seededRng(99);
+  for (let trial = 0; trial < 20; trial += 1) {
+    const marked = Array.from({ length: CELL_COUNT }, () => rng() < 0.5);
+    assert.deepEqual(unpackMarks(packMarks(marked)), marked);
+  }
+});
+
+test('packMarks/unpackMarks round-trip all-false and all-true', () => {
+  const allFalse = new Array(CELL_COUNT).fill(false);
+  const allTrue = new Array(CELL_COUNT).fill(true);
+
+  assert.equal(packMarks(allFalse), '0');
+  assert.deepEqual(unpackMarks(packMarks(allFalse)), allFalse);
+  assert.deepEqual(unpackMarks(packMarks(allTrue)), allTrue);
+});
+
+test('unpackMarks tolerates garbage input without throwing', () => {
+  const blank = new Array(CELL_COUNT).fill(false);
+
+  assert.deepEqual(unpackMarks('!!!'), blank, 'non-base36 characters');
+  assert.deepEqual(unpackMarks(''), blank, 'empty string');
+  assert.deepEqual(unpackMarks(null), blank, 'null');
+  assert.deepEqual(unpackMarks(undefined), blank, 'undefined');
+  assert.deepEqual(unpackMarks('abcdef'), blank, 'longer than 5 characters');
+});
+
+test('unpackMarks always returns exactly CELL_COUNT entries', () => {
+  assert.equal(unpackMarks('jz6rj').length, CELL_COUNT);
+  assert.equal(unpackMarks('bogus!!!').length, CELL_COUNT);
+  assert.equal(unpackMarks('').length, CELL_COUNT);
 });
 
 test('formatShare without wins omits BINGO and reports the count', () => {

@@ -293,6 +293,18 @@ test('a session card is fully determined by session code and player id — same 
   assert.notDeepEqual(first, differentId, 'a different player id must change the card');
 });
 
+test('a session card also depends on deck text, when a custom deck is present', () => {
+  const seedWithDeck = (code, id, deckText) => hashSeed(`${code}:${id}:${deckText}`);
+  const cardWithDeck = (code, id, deckText) => buildCard(DECK, seededRng(seedWithDeck(code, id, deckText)));
+
+  const first = cardWithDeck('k7m2', 'player-a', 'alpha\nbeta');
+  const second = cardWithDeck('k7m2', 'player-a', 'alpha\nbeta');
+  assert.deepEqual(first, second, 'same (code, id, deckText) must reproduce the same card');
+
+  const differentDeckText = cardWithDeck('k7m2', 'player-a', 'gamma\ndelta');
+  assert.notDeepEqual(first, differentDeckText, 'a different deckText must change the card');
+});
+
 test('DECK is large enough that two colleagues barely overlap', () => {
   assert.ok(
     DECK.length >= CELL_COUNT * 4,

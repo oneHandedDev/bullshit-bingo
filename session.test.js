@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { CELL_COUNT, seededRng } from './bingo.js';
-import { normalizeCode, mintCode, formatMarks, parseMarks, readCookie } from './session.js';
+import { normalizeCode, mintCode, formatMarks, parseMarks, readCookie, sessionKey } from './session.js';
 
 test('normalizeCode lowercases and strips non-alphanumerics', () => {
   assert.equal(normalizeCode('K7-M2!'), 'k7m2');
@@ -71,4 +71,23 @@ test('readCookie returns null for a missing name or empty header', () => {
   assert.equal(readCookie('a=1; b=2', 'bb_id'), null);
   assert.equal(readCookie('', 'bb_id'), null);
   assert.equal(readCookie(null, 'bb_id'), null);
+});
+
+test('sessionKey is the bare code when there is no custom deck', () => {
+  assert.equal(sessionKey('k7m2', null), 'k7m2');
+  assert.equal(sessionKey('k7m2', undefined), 'k7m2');
+});
+
+test('sessionKey tags the code with a deck fingerprint when a custom deck is present', () => {
+  const key = sessionKey('k7m2', 'Alpha\nBeta\nGamma');
+  assert.match(key, /^k7m2#[0-9a-z]+$/);
+});
+
+test('sessionKey is deterministic for the same deck text and differs for a different one', () => {
+  const first = sessionKey('k7m2', 'Alpha\nBeta');
+  const second = sessionKey('k7m2', 'Alpha\nBeta');
+  const third = sessionKey('k7m2', 'Alpha\nGamma');
+
+  assert.equal(first, second);
+  assert.notEqual(first, third);
 });

@@ -4,7 +4,7 @@
  * `location` — and are unit tested directly. The browser-coupled edge
  * lives further down and is verified by hand (see the design spec).
  */
-import { CELL_COUNT, packMarks, unpackMarks } from './bingo.js';
+import { CELL_COUNT, packMarks, unpackMarks, hashSeed } from './bingo.js';
 
 const CODE_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 const CODE_MAX_LENGTH = 16;
@@ -75,6 +75,20 @@ export function readCookie(cookieString, name) {
     }
   }
   return null;
+}
+
+/**
+ * The identity used to tag stored marks. `customDeckText` is the
+ * canonical (parsed, newline-joined) deck text currently in play, or
+ * null/undefined when there is no custom deck. No custom deck means
+ * the bare session code — byte-identical to every session link from
+ * before custom decks existed.
+ */
+export function sessionKey(code, customDeckText) {
+  if (customDeckText === null || customDeckText === undefined) {
+    return code;
+  }
+  return `${code}#${hashSeed(customDeckText).toString(36)}`;
 }
 
 // --- Browser-coupled edge below this line. No automated tests: `document`

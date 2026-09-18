@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { CARD_SIZE, CELL_COUNT, LINES, TITLE, lineName, shuffle, buildCard, findWins, formatShare, seededRng, hashSeed, packMarks, unpackMarks } from './bingo.js';
+import { CARD_SIZE, CELL_COUNT, LINES, TITLE, lineName, shuffle, buildCard, findWins, formatShare, seededRng, hashSeed, packMarks, unpackMarks, MAX_PHRASE_LENGTH } from './bingo.js';
 import { DECK } from './deck.js';
 
 test('card geometry is 5x5 with 25 cells', () => {
@@ -266,7 +266,7 @@ test('DECK phrases are trimmed, non-empty and at most 40 characters', () => {
     assert.equal(typeof phrase, 'string');
     assert.equal(phrase, phrase.trim(), `"${phrase}" has surrounding whitespace`);
     assert.ok(phrase.length > 0, 'DECK contains an empty phrase');
-    assert.ok(phrase.length <= 40, `"${phrase}" is ${phrase.length} characters`);
+    assert.ok(phrase.length <= MAX_PHRASE_LENGTH, `"${phrase}" is ${phrase.length} characters`);
   }
 });
 

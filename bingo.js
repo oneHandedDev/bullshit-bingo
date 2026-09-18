@@ -3,6 +3,9 @@ export const CELL_COUNT = CARD_SIZE * CARD_SIZE;
 // Also appears as literal text in index.html's <title> and <h1>; the two must move together.
 export const TITLE = 'Business Bullshit Bingo';
 
+/** A phrase longer than this doesn't fit a card cell on a phone. */
+export const MAX_PHRASE_LENGTH = 40;
+
 /**
  * Deterministic linear congruential generator, so shuffles — and, later,
  * session cards — are reproducible from a seed. Same numeric constants as

@@ -177,6 +177,34 @@
         font-family: ui-monospace, SFMono-Regular, monospace;
         color: var(--fg);
       }
+
+      #deck-text-label {
+        display: block;
+        margin: 0.75rem 0 0.35rem;
+      }
+
+      #deck-text {
+        display: block;
+        width: 100%;
+        min-height: 10rem;
+        margin-bottom: 0.5rem;
+        padding: 0.5rem;
+        font: inherit;
+        font-size: 0.85rem;
+        color: inherit;
+        background: var(--cell-bg);
+        border: 1px solid var(--cell-border);
+        border-radius: 0.5rem;
+        resize: vertical;
+      }
+
+      #deck-errors {
+        white-space: pre-wrap;
+      }
+
+      #deck-broken a {
+        color: var(--accent);
+      }
     </style>
   </head>
   <body>
@@ -188,6 +216,14 @@
           Start a session and share the link. Everyone who opens it gets
           their own card, locked until someone starts a new session.
         </p>
+
+        <label id="deck-text-label" for="deck-text" class="muted">
+          Bring your own words (optional, one per line)
+        </label>
+        <textarea id="deck-text" spellcheck="false"></textarea>
+        <div id="deck-errors" class="warning" hidden></div>
+        <p id="deck-warning" class="muted" hidden></p>
+
         <div class="actions">
           <button id="start-session" type="button">Start a session</button>
         </div>
@@ -199,21 +235,28 @@
           you reload this page.
         </p>
 
-        <div class="actions">
-          <button id="copy-result" type="button">Copy result</button>
+        <div id="deck-broken" hidden>
+          <p id="deck-broken-message" class="warning"></p>
+          <p><a id="deck-broken-back" href="?">Start a new session</a></p>
         </div>
 
-        <p id="banner" class="banner" aria-live="polite"></p>
+        <div id="game-content">
+          <div class="actions">
+            <button id="copy-result" type="button">Copy result</button>
+          </div>
 
-        <div id="grid" class="grid" role="group" aria-label="Bingo card"></div>
+          <p id="banner" class="banner" aria-live="polite"></p>
 
-        <p id="status" class="status" aria-live="polite"></p>
+          <div id="grid" class="grid" role="group" aria-label="Bingo card"></div>
 
-        <footer class="session-footer">
-          Session <code id="session-code"></code>
-          <button id="copy-invite" type="button">Copy invite link</button>
-          <a id="new-session" href="#">New session</a>
-        </footer>
+          <p id="status" class="status" aria-live="polite"></p>
+
+          <footer class="session-footer">
+            Session <code id="session-code"></code>
+            <button id="copy-invite" type="button">Copy invite link</button>
+            <a id="new-session" href="#">New session</a>
+          </footer>
+        </div>
       </section>
     </main>
 
@@ -236,12 +279,21 @@
         loadMarks,
         saveMarks,
         cookiesEnabled,
+        sessionKey,
       } from './session.js';
+      import { parseDeckText, deckWarning, isDefaultDeck } from './customDeck.js';
 
       const startScreen = document.getElementById('start-screen');
       const gameScreen = document.getElementById('game-screen');
       const startButton = document.getElementById('start-session');
+      const deckTextArea = document.getElementById('deck-text');
+      const deckErrors = document.getElementById('deck-errors');
+      const deckWarningEl = document.getElementById('deck-warning');
       const cookieWarning = document.getElementById('cookie-warning');
+      const deckBroken = document.getElementById('deck-broken');
+      const deckBrokenMessage = document.getElementById('deck-broken-message');
+      const deckBrokenBack = document.getElementById('deck-broken-back');
+      const gameContent = document.getElementById('game-content');
       const sessionCodeEl = document.getElementById('session-code');
       const copyInviteButton = document.getElementById('copy-invite');
       const newSessionLink = document.getElementById('new-session');
@@ -254,8 +306,32 @@
 
       if (!code) {
         startScreen.hidden = false;
+        deckTextArea.value = DECK.join('\n');
+
+        function updateDeckWarning() {
+          const { phrases } = parseDeckText(deckTextArea.value);
+          const warning = deckWarning(phrases);
+          deckWarningEl.textContent = warning ?? '';
+          deckWarningEl.hidden = warning === null;
+        }
+        deckTextArea.addEventListener('input', updateDeckWarning);
+        updateDeckWarning();
+
         startButton.addEventListener('click', () => {
-          location.search = `?s=${mintCode()}`;
+          const { phrases, errors } = parseDeckText(deckTextArea.value);
+          if (errors.length > 0) {
+            deckErrors.textContent = errors.join('\n');
+            deckErrors.hidden = false;
+            return;
+          }
+          deckErrors.hidden = true;
+
+          const params = new URLSearchParams();
+          params.set('s', mintCode());
+          if (!isDefaultDeck(phrases)) {
+            params.set('d', phrases.join('\n'));
+          }
+          location.search = params.toString();
         });
       } else {
         startGame(code);
@@ -269,9 +345,33 @@
           cookieWarning.hidden = false;
         }
 
+        const urlParams = new URLSearchParams(location.search);
+        const rawDeckParam = urlParams.get('d');
+
+        let deck = DECK;
+        if (rawDeckParam !== null) {
+          const { phrases } = parseDeckText(rawDeckParam);
+          if (phrases.length < CELL_COUNT) {
+            deckBrokenMessage.textContent = `This session's word list looks broken (need ${CELL_COUNT} phrases, this link has ${phrases.length}).`;
+            deckBrokenBack.href = location.pathname;
+            deckBroken.hidden = false;
+            gameContent.hidden = true;
+            return;
+          }
+          deck = phrases;
+        }
+
+        // Backward compatibility: with no custom deck, the seed and the
+        // marks-cookie tag are byte-identical to every session link from
+        // before custom decks existed.
+        const deckText = rawDeckParam !== null ? deck.join('\n') : null;
         const id = loadIdentity();
-        const card = buildCard(DECK, seededRng(hashSeed(`${sessionCode}:${id}`)));
-        const marked = loadMarks(sessionCode);
+        const seedInput =
+          deckText !== null ? `${sessionCode}:${id}:${deckText}` : `${sessionCode}:${id}`;
+        const key = sessionKey(sessionCode, deckText);
+
+        const card = buildCard(deck, seededRng(hashSeed(seedInput)));
+        const marked = loadMarks(key);
 
         const cells = Array.from({ length: CELL_COUNT }, (_, index) => {
           const cell = document.createElement('button');
@@ -279,7 +379,7 @@
           cell.className = 'cell';
           cell.addEventListener('click', () => {
             marked[index] = !marked[index];
-            saveMarks(sessionCode, marked);
+            saveMarks(key, marked);
             status.textContent = '';
             render();
           });
@@ -333,7 +433,12 @@
           ) {
             return;
           }
-          location.search = `?s=${mintCode()}`;
+          const newParams = new URLSearchParams();
+          newParams.set('s', mintCode());
+          if (rawDeckParam !== null) {
+            newParams.set('d', rawDeckParam);
+          }
+          location.search = newParams.toString();
         });
 
         render();

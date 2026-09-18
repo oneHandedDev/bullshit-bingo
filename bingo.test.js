@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { CARD_SIZE, CELL_COUNT, LINES, TITLE, lineName, shuffle, buildCard, findWins, formatShare, seededRng, hashSeed, packMarks, unpackMarks } from './bingo.js';
+import { CARD_SIZE, CELL_COUNT, LINES, TITLE, lineName, shuffle, buildCard, findWins, formatShare, seededRng, hashSeed, packMarks, unpackMarks, MAX_PHRASE_LENGTH } from './bingo.js';
 import { DECK } from './deck.js';
 
 test('card geometry is 5x5 with 25 cells', () => {
@@ -266,7 +266,7 @@ test('DECK phrases are trimmed, non-empty and at most 40 characters', () => {
     assert.equal(typeof phrase, 'string');
     assert.equal(phrase, phrase.trim(), `"${phrase}" has surrounding whitespace`);
     assert.ok(phrase.length > 0, 'DECK contains an empty phrase');
-    assert.ok(phrase.length <= 40, `"${phrase}" is ${phrase.length} characters`);
+    assert.ok(phrase.length <= MAX_PHRASE_LENGTH, `"${phrase}" is ${phrase.length} characters`);
   }
 });
 
@@ -291,6 +291,18 @@ test('a session card is fully determined by session code and player id — same 
 
   const differentId = cardFor('k7m2', 'player-b');
   assert.notDeepEqual(first, differentId, 'a different player id must change the card');
+});
+
+test('a session card also depends on deck text, when a custom deck is present', () => {
+  const seedWithDeck = (code, id, deckText) => hashSeed(`${code}:${id}:${deckText}`);
+  const cardWithDeck = (code, id, deckText) => buildCard(DECK, seededRng(seedWithDeck(code, id, deckText)));
+
+  const first = cardWithDeck('k7m2', 'player-a', 'alpha\nbeta');
+  const second = cardWithDeck('k7m2', 'player-a', 'alpha\nbeta');
+  assert.deepEqual(first, second, 'same (code, id, deckText) must reproduce the same card');
+
+  const differentDeckText = cardWithDeck('k7m2', 'player-a', 'gamma\ndelta');
+  assert.notDeepEqual(first, differentDeckText, 'a different deckText must change the card');
 });
 
 test('DECK is large enough that two colleagues barely overlap', () => {
